@@ -26,9 +26,9 @@ class Preprocessor(Dataset):
             fname, pid, camid, domain = self.dataset[index]
         except:
             fname, pid, camid, domain, _ = self.dataset[index]
-        fpath = fname
+        fpath = fname.replace("\\", "/")
         if self.root is not None:
-            fpath = osp.join(self.root, fname)
+            fpath = osp.join(self.root, fpath)
 
         img = Image.open(fpath).convert('RGB')
 
