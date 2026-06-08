@@ -85,6 +85,18 @@ bash run2.sh
 
 The new C-STKR branch is enabled by default because it only activates when a `short_old_model` exists. The first stage has no old model. From the second stage onward, the previous stage's pre-fusion model is used as the short-term old model.
 
+## Logged Losses
+
+Training logs and TensorBoard scalars record the original Bi-C2R loss terms plus the added C-STKR supervision:
+
+- `Loss_ce`: identity classification loss.
+- `Loss_tr`: triplet loss.
+- `Loss_ca`: BiCD-compatible feature alignment loss.
+- `Loss_cr`: BiCD relation distillation loss.
+- `Loss_ad`: BiAD discriminative distillation loss.
+- `Loss_dc`: BiAD directional consistency loss.
+- `Loss_cstkr`: KL divergence between the current affinity matrix and the C-STKR rectified long/short-term old-model affinity target.
+
 ## Validation
 
 Static interface validation can be run without the full CUDA training environment:

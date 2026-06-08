@@ -86,6 +86,7 @@ class Trainer(object):
         losses_cr = AverageMeter()
         losses_ad = AverageMeter()
         losses_dc = AverageMeter()
+        losses_cstkr = AverageMeter()
 
         end = time.time()
 
@@ -119,6 +120,7 @@ class Trainer(object):
                     divergence = self.cal_CSTKR_KL(Affinity_matrix_new, Affinity_matrix_old, Affinity_matrix_short_old, targets)
                 else:
                     divergence = self.cal_KL(Affinity_matrix_new, Affinity_matrix_old, targets)
+                losses_cstkr.update(divergence.item())
                 loss = loss + divergence * self.AF_weight
 
                 
@@ -185,6 +187,8 @@ class Trainer(object):
                           global_step=epoch * train_iters + i)
                 self.writer.add_scalar(tag="loss/Loss_dc_{}".format(training_phase), scalar_value=losses_dc.val,
                           global_step=epoch * train_iters + i)
+                self.writer.add_scalar(tag="loss/Loss_cstkr_{}".format(training_phase), scalar_value=losses_cstkr.val,
+                          global_step=epoch * train_iters + i)
                 self.writer.add_scalar(tag="time/Time_{}".format(training_phase), scalar_value=batch_time.val,
                           global_step=epoch * train_iters + i)
             if (i + 1) == train_iters:
@@ -197,6 +201,7 @@ class Trainer(object):
                       'Loss_cr {:.3f} ({:.3f})\t'
                       'Loss_ad {:.3f} ({:.3f})\t'
                       'Loss_dc {:.3f} ({:.3f})\t'
+                      'Loss_cstkr {:.3f} ({:.3f})\t'
                       .format(epoch, i + 1, train_iters,
                               batch_time.val, batch_time.avg,
                               losses_ce.val, losses_ce.avg,
@@ -205,6 +210,7 @@ class Trainer(object):
                               losses_cr.val, losses_cr.avg,
                               losses_ad.val, losses_ad.avg,
                               losses_dc.val, losses_dc.avg,
+                              losses_cstkr.val, losses_cstkr.avg,
                   ))       
 
     def get_normal_affinity(self,x,Norm=0.1):

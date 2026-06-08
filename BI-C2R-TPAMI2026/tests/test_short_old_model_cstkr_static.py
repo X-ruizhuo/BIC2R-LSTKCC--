@@ -24,6 +24,8 @@ def test_trainer_accepts_short_old_model_for_cstkr():
     source = (ROOT / "reid/trainer.py").read_text(encoding="utf-8")
     assert "cal_CSTKR_KL" in source
     assert "build_cstkr_target" in source
+    assert "losses_cstkr" in source
+    assert "Loss_cstkr_" in source
 
 
 def test_continual_train_preserves_short_term_model_before_fusion():
