@@ -61,12 +61,16 @@ class Trainer(object):
         return self.weight_anti * self.criterion_anti_forget(new_sim_prob_unpair_log_, old_sim_prob_unpair_)
 
     def train(self, epoch, data_loader_train,  optimizer, training_phase,
-              train_iters=200, add_num=0, old_model=None,         
+              train_iters=200, add_num=0, old_model=None, short_old_model=None,
               ):
 
         self.model.train()
         self.model_trans.train()
         self.model_trans2.train()
+        if old_model is not None:
+            old_model.eval()
+        if short_old_model is not None:
+            short_old_model.eval()
         # freeze the bn layer totally
         for m in self.model.module.base.modules():
             if isinstance(m, nn.BatchNorm2d):
@@ -102,11 +106,19 @@ class Trainer(object):
             if old_model is not None:
                 with torch.no_grad():
                     s_features_old, bn_feat_old, cls_outputs_old, feat_final_layer_old = old_model(s_inputs, get_all_feat=True)
+                    if short_old_model is not None:
+                        s_features_short_old, _, _, _ = short_old_model(s_inputs, get_all_feat=True)
                 if isinstance(s_features_old, tuple):
                     s_features_old=s_features_old[0]
+                if short_old_model is not None and isinstance(s_features_short_old, tuple):
+                    s_features_short_old = s_features_short_old[0]
                 Affinity_matrix_new = self.get_normal_affinity(s_features)
                 Affinity_matrix_old = self.get_normal_affinity(s_features_old)
-                divergence = self.cal_KL(Affinity_matrix_new, Affinity_matrix_old, targets)
+                if short_old_model is not None:
+                    Affinity_matrix_short_old = self.get_normal_affinity(s_features_short_old)
+                    divergence = self.cal_CSTKR_KL(Affinity_matrix_new, Affinity_matrix_old, Affinity_matrix_short_old, targets)
+                else:
+                    divergence = self.cal_KL(Affinity_matrix_new, Affinity_matrix_old, targets)
                 loss = loss + divergence * self.AF_weight
 
                 
@@ -236,6 +248,41 @@ class Trainer(object):
 
         return divergence
 
+    def build_stkr_target(self, Gts, affinity_matrix):
+        attri = self.get_attri(Gts, affinity_matrix, margin=0)
+        pid_mask = Gts.bool()
+
+        rectified_pos = torch.maximum(affinity_matrix, attri['Thres_P'])
+        rectified_neg = torch.minimum(affinity_matrix, attri['Thres_N'])
+        rectified = torch.where(pid_mask, rectified_pos, rectified_neg)
+        rectified = rectified / rectified.sum(1, keepdim=True).clamp_min(1e-12)
+
+        correct_mask = (attri['TP'] + attri['TN']).bool()
+        return rectified, correct_mask
+
+    def build_cstkr_target(self, Affinity_matrix_old, Affinity_matrix_short_old, targets):
+        Gts = (targets.reshape(-1, 1) - targets.reshape(1, -1)) == 0
+        Gts = Gts.float().to(targets.device)
+
+        target_long, correct_long = self.build_stkr_target(Gts, Affinity_matrix_old)
+        target_short, correct_short = self.build_stkr_target(Gts, Affinity_matrix_short_old)
+
+        both_correct_or_wrong = correct_long == correct_short
+        only_long_correct = correct_long & (~correct_short)
+        only_short_correct = correct_short & (~correct_long)
+
+        target_avg = 0.5 * (target_long + target_short)
+        target = torch.where(both_correct_or_wrong, target_avg, target_long)
+        target = torch.where(only_long_correct, target_long, target)
+        target = torch.where(only_short_correct, target_short, target)
+        target = target / target.sum(1, keepdim=True).clamp_min(1e-12)
+        return target.detach()
+
+    def cal_CSTKR_KL(self, Affinity_matrix_new, Affinity_matrix_old, Affinity_matrix_short_old, targets):
+        Target = self.build_cstkr_target(Affinity_matrix_old, Affinity_matrix_short_old, targets)
+        Affinity_matrix_new_log = torch.log(Affinity_matrix_new.clamp_min(1e-12))
+        return self.KLDivLoss(Affinity_matrix_new_log, Target)
+
     def get_attri(self, Gts, pre_affinity_matrix,margin=0):
         Thres_P=((1-Gts)*pre_affinity_matrix).max(dim=1,keepdim=True)[0]
         T_scores=pre_affinity_matrix*Gts
@@ -261,4 +308,3 @@ class Trainer(object):
             "Thres_N":Thres_N
         }
         return attris
-

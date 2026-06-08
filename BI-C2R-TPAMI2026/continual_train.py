@@ -130,10 +130,13 @@ def main_worker(args, cfg):
     else:
         raise AssertionError(f"the model {args.MODEL} is not supported!")
 
-    for set_index in range(0, len(training_set)):       
+    short_old_model = None
+    for set_index in range(0, len(training_set)):
         model_old = copy.deepcopy(model)
         model, model_trans, model_trans2 = train_dataset(cfg, args, all_train_sets, all_test_only_sets, set_index, model, model_trans, model_trans2, out_channel,
-                                            writer,logger_res=logger_res)
+                                            writer,logger_res=logger_res, short_old_model=short_old_model)
+        short_old_model_candidate = copy.deepcopy(model)
+        short_old_model_candidate.eval()
         
         if set_index>0:
             best_alpha = get_adaptive_alpha(args, model, model_old, all_train_sets, set_index)
@@ -175,6 +178,7 @@ def main_worker(args, cfg):
             model_trans2 = set_zero(model_trans2)
         if set_index>0:
             test_model(model, all_train_sets, all_test_only_sets, set_index, logger_res=logger_res, feats_dir=args.logs_dir)    
+        short_old_model = short_old_model_candidate
     print('finished')
 def get_normal_affinity(x,Norm=100):
     from reid.metric_learning.distance import cosine_similarity
@@ -201,7 +205,7 @@ def get_adaptive_alpha(args, model, model_old, all_train_sets, set_index):
 
 
 
-def train_dataset(cfg, args, all_train_sets, all_test_only_sets, set_index, model, model_trans, model_trans2, out_channel, writer,logger_res=None):
+def train_dataset(cfg, args, all_train_sets, all_test_only_sets, set_index, model, model_trans, model_trans2, out_channel, writer,logger_res=None, short_old_model=None):
     dataset, num_classes, train_loader, test_loader, init_loader, name = all_train_sets[
         set_index]
 
@@ -264,7 +268,7 @@ def train_dataset(cfg, args, all_train_sets, all_test_only_sets, set_index, mode
 
         train_loader.new_epoch()
         trainer.train(epoch, train_loader,  optimizer, training_phase=set_index + 1,
-                      train_iters=len(train_loader), add_num=add_num, old_model=old_model,
+                      train_iters=len(train_loader), add_num=add_num, old_model=old_model, short_old_model=short_old_model,
                       )
         lr_scheduler.step()       
        
